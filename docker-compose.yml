@@ -1,0 +1,69 @@
+services:
+
+  # ── PostgreSQL 15 ─────────────────────────────────────────────────────────
+  db:
+    image: postgres:15-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: logicx
+      POSTGRES_PASSWORD: logicx
+      POSTGRES_DB: wafer_yield
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U logicx -d wafer_yield"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  # ── FastAPI backend ────────────────────────────────────────────────────────
+  backend:
+    build:
+      context: src/backend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql+psycopg2://logicx:logicx@db:5432/wafer_yield
+      ENVIRONMENT: production
+      SEED: "42"
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - ./src/backend:/app
+    entrypoint: ["/app/entrypoint.sh"]
+
+  # ── React frontend (nginx serving Vite build) ──────────────────────────────
+  frontend:
+    build:
+      context: src/frontend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    ports:
+      - "5173:80"
+    depends_on:
+      - backend
+
+  # ── Backend test runner (CI / local) ──────────────────────────────────────
+  # Uses SQLite in-memory — does NOT depend on the db service.
+  backend-test:
+    build:
+      context: src/backend
+      dockerfile: Dockerfile
+    environment:
+      DATABASE_URL: "sqlite+aiosqlite:///:memory:"
+      ENVIRONMENT: test
+      SEED: "42"
+    volumes:
+      - ./src/backend:/app
+    entrypoint: ["python", "-m", "pytest", "tests/", "-v", "--tb=short"]
+    profiles:
+      - test
+
+volumes:
+  postgres_data:

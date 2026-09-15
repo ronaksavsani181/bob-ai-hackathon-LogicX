@@ -1,0 +1,39 @@
+---
+# Bobathon Submission — Team LogicX
+# Challenge S1: Wafer Yield Root Cause & Defect Pattern Analyser
+#
+# Fields marked FILL_BEFORE_SUBMIT must be completed before final submission.
+
+team_name: LogicX
+challenge_id: S1
+project_name: "Wafer Yield Root Cause & Defect Pattern Analyser"
+project_description: >
+  A semiconductor manufacturing analytics control-tower prototype that ingests
+  wafer lot data and defect reports to identify yield/defect patterns, rank
+  evidence-supported root-cause candidates, recommend corrective actions, and
+  flag upcoming batches whose pre-run parameters historically correlate with
+  poor outcomes.
+
+repository_url: FILL_BEFORE_SUBMIT   # e.g. https://github.com/org/repo
+submission_url: FILL_BEFORE_SUBMIT   # hackathon submission portal URL
+
+tech_stack:
+  frontend: "React 18 + TypeScript + Vite + TailwindCSS"
+  backend: "Python 3.11 + FastAPI + SQLAlchemy + Alembic"
+  analytics: "pandas, NumPy, SciPy, scikit-learn"
+  database: "PostgreSQL 15"
+  containerisation: "Docker Compose"
+
+ibm_products_used:
+  - "IBM Bob (SDLC agent — plan-driven development)"
+
+members:
+  - FILL_BEFORE_SUBMIT   # Add team member names/IDs
+
+quickstart: |
+  git clone <repository_url>
+  cd <repo>
+  docker compose up --build
+  # UI: http://localhost:5173
+  # API: http://localhost:8000/api/health
+  # API docs: http://localhost:8000/docs
