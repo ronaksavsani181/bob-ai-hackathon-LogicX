@@ -14,8 +14,8 @@ project_description: >
   flag upcoming batches whose pre-run parameters historically correlate with
   poor outcomes.
 
-repository_url: FILL_BEFORE_SUBMIT   # e.g. https://github.com/org/repo
-submission_url: FILL_BEFORE_SUBMIT   # hackathon submission portal URL
+repository_url: https://github.com/ronaksavsani181/bob-ai-hackathon-LogicX   # e.g. https://github.com/org/repo
+submission_url: https://github.com/ronaksavsani181/bob-ai-hackathon-LogicX   # hackathon submission portal URL
 
 tech_stack:
   frontend: "React 18 + TypeScript + Vite + TailwindCSS"
@@ -31,7 +31,7 @@ members:
   - FILL_BEFORE_SUBMIT   # Add team member names/IDs
 
 quickstart: |
-  git clone <repository_url>
+  git clone <https://github.com/ronaksavsani181/bob-ai-hackathon-LogicX>
   cd <repo>
   docker compose up --build
   # UI: http://localhost:5173
