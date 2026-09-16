@@ -18,6 +18,8 @@ from app.schemas import (
     ChamberRecurrenceResponse,
     ChamberRecurrenceSummary,
     FleetYieldSummary,
+    YieldTrendPoint,
+    YieldTrendResponse,
 )
 from app.services import ingestion
 from app.services.recurrence import analyze_chamber_recurrence
@@ -77,6 +79,56 @@ def fleet_summary(db: Session = Depends(get_db)):
         excursion_count_7d=ex_7d,
         excursion_count_30d=ex_30d,
         high_risk_lots_pending=0,   # populated by pre-run router when model is trained
+        generated_at=_utcnow(),
+    )
+
+
+@router.get("/yield-trend", response_model=YieldTrendResponse)
+def yield_trend(
+    db: Session = Depends(get_db),
+    last_n: int = 150,
+):
+    """
+    Return the yield trend series for the most recent lots.
+
+    Used by the Monitor screen chart.  Points are sorted chronologically.
+    Excursion threshold = fleet_mean - 2.5 * fleet_std.
+    """
+    yields_df = ingestion.load_yield_results(db)
+    wafers_df = ingestion.load_wafers(db)
+    lots_df   = ingestion.load_lots(db)
+
+    if yields_df.empty or lots_df.empty:
+        return YieldTrendResponse(
+            points=[], fleet_mean=0.93, excursion_threshold=0.85, generated_at=_utcnow()
+        )
+
+    yield_with_lot = yields_df.merge(
+        wafers_df[["wafer_id", "lot_id"]], on="wafer_id", how="left"
+    )
+    lot_yield = yield_with_lot.groupby("lot_id")["die_yield"].mean().reset_index()
+    merged = lots_df.merge(lot_yield, on="lot_id", how="left").dropna(subset=["die_yield"])
+    merged = merged.sort_values("actual_start_at").tail(last_n)
+
+    fleet_mean = float(lot_yield["die_yield"].mean())
+    fleet_std  = float(lot_yield["die_yield"].std())
+    threshold  = fleet_mean - 2.5 * fleet_std
+
+    points = []
+    for _, row in merged.iterrows():
+        if pd.isna(row.get("actual_start_at")):
+            continue
+        points.append(YieldTrendPoint(
+            lot_id_str=str(row["lot_id_str"]),
+            actual_start_at=row["actual_start_at"],
+            mean_yield=round(float(row["die_yield"]), 4),
+            is_excursion=bool(float(row["die_yield"]) < threshold),
+        ))
+
+    return YieldTrendResponse(
+        points=points,
+        fleet_mean=round(fleet_mean, 4),
+        excursion_threshold=round(threshold, 4),
         generated_at=_utcnow(),
     )
 

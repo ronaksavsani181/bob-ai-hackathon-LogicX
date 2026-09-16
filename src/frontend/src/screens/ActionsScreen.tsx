@@ -1,263 +1,348 @@
-// screens/ActionsScreen.tsx — Screen 6: Actions & Engineer Review
+// screens/ActionsScreen.tsx — Screen 6: Engineer review & corrective actions
+//
+// HUMAN APPROVAL BOUNDARY:
+//   All recommendations are advisory.  An engineer MUST explicitly approve or
+//   reject each action here.  The system never auto-approves.
+//   Reviews are recorded with engineer ID, timestamp, and notes.
 
-import React, { useState } from 'react';
-import { Card, Badge, DisclaimerBanner } from '../components/Shared';
+import React, { useState, useEffect, useCallback } from 'react';
+import { api } from '../api/client';
+import type { ActionRecommendation, ActionListResponse } from '../types/api';
+import { Card, Badge, Spinner, ErrorMessage, DisclaimerBanner } from '../components/Shared';
 
-// ---------------------------------------------------------------------------
-// Static demo actions — in a full implementation these would be persisted to
-// the actions / action_reviews tables via FastAPI endpoints.
-// ---------------------------------------------------------------------------
-interface DemoAction {
-  id: number;
-  lot_id_str: string;
-  recommendation: string;
-  action_type: 'hold' | 're-inspect' | 'expedite' | 'monitor' | 'disposition';
-  priority: 'critical' | 'high' | 'medium' | 'low';
-  evidence_ids: string[];
-  status: 'pending' | 'acknowledged' | 'approved' | 'rejected' | 'completed';
-  created_at: string;
-  reviewed_by: string | null;
-  review_notes: string | null;
-  root_cause_id: string;
+type BadgeVariant = 'red' | 'orange' | 'blue' | 'green' | 'gray';
+
+function priorityBadge(priority: string) {
+  const map: Record<string, BadgeVariant> = {
+    critical: 'red',
+    high: 'orange',
+    medium: 'blue',
+    low: 'gray',
+  };
+  return <Badge label={priority} variant={map[priority] ?? 'gray'} />;
 }
 
-const DEMO_ACTIONS: DemoAction[] = [
-  {
-    id: 1,
-    lot_id_str: 'L0305',
-    recommendation:
-      'Hold lot L0305 pending review. Etch chamber ETH-02 shows +12% rate drift across 15 consecutive lots. ' +
-      'Recommend chamber qualification run before releasing affected lots.',
-    action_type: 'hold',
-    priority: 'high',
-    evidence_ids: ['EVD-A1B2C3D4', 'EVD-E5F6G7H8'],
-    status: 'pending',
-    created_at: new Date(Date.now() - 3 * 3600000).toISOString(),
-    reviewed_by: null,
-    review_notes: null,
-    root_cause_id: 'etch_chamber_drift',
-  },
-  {
-    id: 2,
-    lot_id_str: 'L0408',
-    recommendation:
-      'Re-inspect wafers from lot L0408. Particle excursion detected on CVD-03 with center-heavy ' +
-      'spatial pattern (60–80 defects/wafer). 10–20% yield penalty expected.',
-    action_type: 're-inspect',
-    priority: 'critical',
-    evidence_ids: ['EVD-C9D8E7F6', 'EVD-A4B3C2D1'],
-    status: 'acknowledged',
-    created_at: new Date(Date.now() - 1 * 3600000).toISOString(),
-    reviewed_by: 'eng_patel',
-    review_notes: 'Confirmed particle event. Scheduling re-inspection.',
-    root_cause_id: 'particle_contamination',
-  },
-  {
-    id: 3,
-    lot_id_str: 'L0215',
-    recommendation:
-      'Monitor lot L0215. Overlay excursion detected on LIT-01 (3.5× nominal σ). ' +
-      'Yield within spec currently but metrology trend warrants close watch.',
-    action_type: 'monitor',
-    priority: 'medium',
-    evidence_ids: ['EVD-M1N2O3P4'],
-    status: 'pending',
-    created_at: new Date(Date.now() - 6 * 3600000).toISOString(),
-    reviewed_by: null,
-    review_notes: null,
-    root_cause_id: 'overlay_excursion',
-  },
-  {
-    id: 4,
-    lot_id_str: 'L0420',
-    recommendation:
-      'Post-maintenance yield shift on ETH-02. 15 lots after unscheduled PM show ' +
-      '4–8% yield deficit. Monitor until recovery trend established.',
-    action_type: 'monitor',
-    priority: 'high',
-    evidence_ids: ['EVD-PM1X2Y3Z4'],
-    status: 'approved',
-    created_at: new Date(Date.now() - 48 * 3600000).toISOString(),
-    reviewed_by: 'eng_smith',
-    review_notes: 'Approved for enhanced monitoring. Review after 10 more lots.',
-    root_cause_id: 'post_maintenance_shift',
-  },
-];
+function statusBadge(status: string) {
+  const map: Record<string, BadgeVariant> = {
+    pending: 'orange',
+    acknowledged: 'blue',
+    approved: 'green',
+    rejected: 'gray',
+    completed: 'green',
+  };
+  return <Badge label={status} variant={map[status] ?? 'gray'} />;
+}
 
-const PRIORITY_COLORS: Record<string, 'red' | 'orange' | 'yellow' | 'green'> = {
-  critical: 'red', high: 'orange', medium: 'yellow', low: 'green',
-};
-const STATUS_COLORS: Record<string, 'red' | 'orange' | 'blue' | 'green' | 'gray'> = {
-  pending: 'orange', acknowledged: 'blue', approved: 'green', rejected: 'red', completed: 'gray',
-};
+function actionTypeBadge(actionType: string) {
+  const map: Record<string, BadgeVariant> = {
+    hold: 'red',
+    expedite: 'orange',
+    monitor: 'blue',
+    're-inspect': 'orange',
+    disposition: 'gray',
+  };
+  return <Badge label={actionType} variant={map[actionType] ?? 'gray'} />;
+}
 
-export default function ActionsScreen() {
-  const [actions, setActions] = useState<DemoAction[]>(DEMO_ACTIONS);
-  const [selectedAction, setSelectedAction] = useState<DemoAction | null>(null);
+// ---------------------------------------------------------------------------
+// Review modal
+// ---------------------------------------------------------------------------
+
+interface ReviewModalProps {
+  action: ActionRecommendation;
+  onClose: () => void;
+  onSubmit: (actionId: number, decision: 'approved' | 'rejected', reviewer: string, notes: string) => Promise<void>;
+}
+
+function ReviewModal({ action, onClose, onSubmit }: ReviewModalProps) {
+  const [decision, setDecision] = useState<'approved' | 'rejected'>('approved');
   const [reviewer, setReviewer] = useState('');
   const [notes, setNotes] = useState('');
-  const [filterStatus, setFilterStatus] = useState<string>('all');
+  const [submitting, setSubmitting] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
 
-  const filteredActions = filterStatus === 'all'
-    ? actions
-    : actions.filter(a => a.status === filterStatus);
-
-  const handleReview = (decision: 'approved' | 'rejected') => {
-    if (!selectedAction || !reviewer.trim()) return;
-    setActions(prev => prev.map(a =>
-      a.id === selectedAction.id
-        ? { ...a, status: decision, reviewed_by: reviewer, review_notes: notes }
-        : a
-    ));
-    setSelectedAction(null);
-    setReviewer('');
-    setNotes('');
+  const handleSubmit = async () => {
+    if (!reviewer.trim()) { setErr('Reviewer ID is required.'); return; }
+    setSubmitting(true);
+    setErr(null);
+    try {
+      await onSubmit(action.action_id as number, decision, reviewer.trim(), notes.trim());
+      onClose();
+    } catch (e) {
+      setErr(String(e));
+    } finally {
+      setSubmitting(false);
+    }
   };
 
-  const pendingCount = actions.filter(a => a.status === 'pending').length;
-
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-xl font-bold text-gray-800">Actions & Engineer Review</h1>
-        {pendingCount > 0 && (
-          <span className="bg-orange-100 text-orange-700 text-sm font-semibold px-3 py-1 rounded-full border border-orange-200">
-            {pendingCount} pending review
-          </span>
-        )}
-      </div>
+    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-lg shadow-xl w-full max-w-lg">
+        <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
+          <h2 className="font-semibold text-gray-800">Engineer Review — Action #{action.action_id}</h2>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl leading-none">×</button>
+        </div>
+        <div className="px-6 py-4 space-y-4">
+          {/* Recommendation summary */}
+          <div className="bg-gray-50 rounded p-3 text-sm text-gray-700 border border-gray-200">
+            <p className="font-medium text-xs text-gray-400 mb-1 uppercase tracking-wide">Recommendation</p>
+            <p>{action.recommendation}</p>
+          </div>
 
-      <DisclaimerBanner
-        text="Engineering review is REQUIRED before any action is taken. Root-cause candidates are evidence-ranked, not confirmed causes. The engineer has full authority to override, approve, or reject any recommendation."
-      />
-
-      {/* Status filter */}
-      <div className="flex gap-2">
-        {['all', 'pending', 'acknowledged', 'approved', 'rejected'].map(s => (
-          <button
-            key={s}
-            onClick={() => setFilterStatus(s)}
-            className={`px-3 py-1 rounded text-sm capitalize ${
-              filterStatus === s
-                ? 'bg-blue-600 text-white'
-                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-            }`}
-          >
-            {s}
-          </button>
-        ))}
-      </div>
-
-      <div className="flex gap-4">
-        {/* Actions list */}
-        <div className="flex-1 space-y-3">
-          {filteredActions.length === 0 && (
-            <p className="text-sm text-gray-400 p-4">No actions in this status.</p>
-          )}
-          {filteredActions.map(action => (
-            <div
-              key={action.id}
-              className={`rounded-lg border p-4 cursor-pointer transition-all ${
-                selectedAction?.id === action.id
-                  ? 'border-blue-400 bg-blue-50 shadow-sm'
-                  : 'border-gray-200 bg-white hover:border-gray-300'
-              }`}
-              onClick={() => setSelectedAction(action)}
-            >
-              <div className="flex items-start justify-between mb-2">
-                <div className="flex items-center gap-2">
-                  <code className="text-xs font-mono text-blue-700 bg-blue-50 px-1.5 py-0.5 rounded">
-                    {action.lot_id_str}
-                  </code>
-                  <Badge label={action.action_type.replace('-', ' ')} variant="gray" />
-                  <Badge label={action.priority} variant={PRIORITY_COLORS[action.priority]} />
-                </div>
-                <Badge label={action.status} variant={STATUS_COLORS[action.status] ?? 'gray'} />
-              </div>
-              <p className="text-sm text-gray-700 leading-relaxed">{action.recommendation}</p>
-              <div className="mt-2 flex items-center gap-3 text-xs text-gray-400">
-                <span>Root cause: <span className="text-gray-600">{action.root_cause_id.replace(/_/g, ' ')}</span></span>
-                <span>·</span>
-                <span>{new Date(action.created_at).toLocaleString()}</span>
-                {action.reviewed_by && (
-                  <>
-                    <span>·</span>
-                    <span>Reviewed by: <span className="text-gray-600">{action.reviewed_by}</span></span>
-                  </>
-                )}
-              </div>
-              {action.review_notes && (
-                <p className="mt-1.5 text-xs text-gray-500 bg-gray-50 rounded px-2 py-1.5 border border-gray-100">
-                  Note: {action.review_notes}
-                </p>
-              )}
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <p className="text-xs text-gray-400 mb-0.5">Lot</p>
+              <p className="font-mono font-semibold text-sm">{action.lot_id_str}</p>
             </div>
-          ))}
+            <div>
+              <p className="text-xs text-gray-400 mb-0.5">Priority</p>
+              {priorityBadge(action.priority)}
+            </div>
+          </div>
+
+          {/* Decision */}
+          <div>
+            <p className="text-xs text-gray-400 mb-1 uppercase tracking-wide">Decision *</p>
+            <div className="flex gap-3">
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="radio"
+                  value="approved"
+                  checked={decision === 'approved'}
+                  onChange={() => setDecision('approved')}
+                />
+                <span className="text-sm text-green-700 font-medium">Approve</span>
+              </label>
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="radio"
+                  value="rejected"
+                  checked={decision === 'rejected'}
+                  onChange={() => setDecision('rejected')}
+                />
+                <span className="text-sm text-red-700 font-medium">Reject</span>
+              </label>
+            </div>
+          </div>
+
+          {/* Reviewer ID */}
+          <div>
+            <label className="block text-xs text-gray-400 mb-1 uppercase tracking-wide">
+              Reviewer ID / Badge *
+            </label>
+            <input
+              type="text"
+              value={reviewer}
+              onChange={e => setReviewer(e.target.value)}
+              placeholder="e.g. eng_chen"
+              className="w-full border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:border-blue-400"
+            />
+          </div>
+
+          {/* Notes */}
+          <div>
+            <label className="block text-xs text-gray-400 mb-1 uppercase tracking-wide">
+              Notes / Rationale (optional)
+            </label>
+            <textarea
+              value={notes}
+              onChange={e => setNotes(e.target.value)}
+              rows={3}
+              placeholder="Provide engineering rationale for the decision…"
+              className="w-full border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:border-blue-400 resize-none"
+            />
+          </div>
+
+          {err && (
+            <p className="text-xs text-red-600 bg-red-50 border border-red-200 rounded px-3 py-2">{err}</p>
+          )}
+
+          <div className="bg-amber-50 border border-amber-200 rounded p-3 text-xs text-amber-700">
+            ⚠ This review will be logged with your engineer ID and timestamp for audit purposes.
+          </div>
         </div>
 
-        {/* Review panel */}
-        {selectedAction && selectedAction.status === 'pending' && (
-          <div className="w-80 flex-shrink-0">
-            <Card title="Engineer Review">
-              <div className="space-y-3">
-                <div>
-                  <p className="text-xs text-gray-400 mb-1">Lot</p>
-                  <code className="font-mono text-sm text-blue-700">{selectedAction.lot_id_str}</code>
-                </div>
-                <div>
-                  <p className="text-xs text-gray-400 mb-1">Evidence IDs</p>
-                  <div className="flex flex-wrap gap-1">
-                    {selectedAction.evidence_ids.map(eid => (
-                      <code key={eid} className="text-xs bg-gray-100 px-1.5 py-0.5 rounded font-mono text-gray-600">
-                        {eid}
-                      </code>
-                    ))}
-                  </div>
-                </div>
-                <div>
-                  <label className="text-xs text-gray-400 block mb-1">Reviewer Name *</label>
-                  <input
-                    type="text"
-                    value={reviewer}
-                    onChange={e => setReviewer(e.target.value)}
-                    placeholder="e.g. eng_jones"
-                    className="w-full border border-gray-200 rounded px-2 py-1.5 text-sm focus:outline-none focus:border-blue-400"
-                  />
-                </div>
-                <div>
-                  <label className="text-xs text-gray-400 block mb-1">Review Notes</label>
-                  <textarea
-                    value={notes}
-                    onChange={e => setNotes(e.target.value)}
-                    placeholder="Optional notes…"
-                    rows={3}
-                    className="w-full border border-gray-200 rounded px-2 py-1.5 text-sm focus:outline-none focus:border-blue-400 resize-none"
-                  />
-                </div>
-                <div className="flex gap-2 pt-1">
-                  <button
-                    disabled={!reviewer.trim()}
-                    onClick={() => handleReview('approved')}
-                    className="flex-1 py-2 bg-green-600 text-white rounded text-sm font-semibold hover:bg-green-700 disabled:opacity-40 disabled:cursor-not-allowed"
-                  >
-                    ✓ Approve
-                  </button>
-                  <button
-                    disabled={!reviewer.trim()}
-                    onClick={() => handleReview('rejected')}
-                    className="flex-1 py-2 bg-red-600 text-white rounded text-sm font-semibold hover:bg-red-700 disabled:opacity-40 disabled:cursor-not-allowed"
-                  >
-                    ✗ Reject
-                  </button>
-                </div>
-                <p className="text-xs text-gray-400 text-center">
-                  Engineer name required before review decision.
-                </p>
-              </div>
-            </Card>
-          </div>
-        )}
+        <div className="px-6 py-4 border-t border-gray-200 flex items-center justify-end gap-3">
+          <button
+            onClick={onClose}
+            className="px-4 py-1.5 text-sm text-gray-600 border border-gray-300 rounded hover:bg-gray-50"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={handleSubmit}
+            disabled={submitting}
+            className={`px-4 py-1.5 text-sm font-medium rounded transition-colors ${
+              decision === 'approved'
+                ? 'bg-green-600 text-white hover:bg-green-700 disabled:opacity-50'
+                : 'bg-red-600 text-white hover:bg-red-700 disabled:opacity-50'
+            }`}
+          >
+            {submitting ? 'Submitting…' : `Submit ${decision === 'approved' ? 'Approval' : 'Rejection'}`}
+          </button>
+        </div>
       </div>
     </div>
+  );
+}
+
+
+// ---------------------------------------------------------------------------
+// ActionsScreen
+// ---------------------------------------------------------------------------
+
+export default function ActionsScreen() {
+  const [data, setData] = useState<ActionListResponse | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [reviewTarget, setReviewTarget] = useState<ActionRecommendation | null>(null);
+  const [successMsg, setSuccessMsg] = useState<string | null>(null);
+
+  const loadActions = useCallback(() => {
+    setLoading(true);
+    api.listActions()
+      .then(setData)
+      .catch(e => setError(String(e)))
+      .finally(() => setLoading(false));
+  }, []);
+
+  useEffect(() => { loadActions(); }, [loadActions]);
+
+  const handleReviewSubmit = async (
+    actionId: number,
+    decision: 'approved' | 'rejected',
+    reviewer: string,
+    notes: string,
+  ) => {
+    const result = await api.submitReview({ action_id: actionId, decision, reviewer, notes });
+    setSuccessMsg(`Action #${result.action_id} ${result.decision} by ${result.reviewer} — logged.`);
+    loadActions(); // refresh
+    setTimeout(() => setSuccessMsg(null), 5000);
+  };
+
+  if (loading) return <Spinner />;
+  if (error) return <ErrorMessage msg={error} />;
+
+  const pending = data?.actions.filter(a => a.status === 'pending') ?? [];
+  const reviewed = data?.actions.filter(a => a.status !== 'pending') ?? [];
+
+  return (
+    <>
+      {reviewTarget && (
+        <ReviewModal
+          action={reviewTarget}
+          onClose={() => setReviewTarget(null)}
+          onSubmit={handleReviewSubmit}
+        />
+      )}
+
+      <div className="space-y-6">
+        <div className="flex items-center justify-between">
+          <h1 className="text-xl font-bold text-gray-800">Actions / Engineer Review</h1>
+          <button
+            onClick={loadActions}
+            className="text-xs border border-gray-300 rounded px-3 py-1.5 text-gray-600 hover:bg-gray-50"
+          >
+            Refresh
+          </button>
+        </div>
+
+        <DisclaimerBanner text="All recommendations are advisory. An engineer must explicitly approve or reject each action. No action is auto-approved." />
+
+        {successMsg && (
+          <div className="bg-green-50 border border-green-200 rounded px-4 py-2.5 text-sm text-green-700">
+            ✓ {successMsg}
+          </div>
+        )}
+
+        {/* Human approval boundary callout */}
+        <div className="bg-blue-50 border border-blue-200 rounded-lg px-4 py-3 text-sm text-blue-800">
+          <p className="font-semibold mb-0.5">Human Approval Boundary</p>
+          <p className="text-xs text-blue-600">
+            The analytics engine surfaces candidates. All final decisions require explicit sign-off
+            by a qualified process or yield engineer. Reviews are persisted with engineer ID,
+            timestamp, and rationale for full auditability.
+          </p>
+        </div>
+
+        {/* Pending actions */}
+        <Card title={`Pending Review (${pending.length})`}>
+          {pending.length === 0 ? (
+            <p className="text-sm text-gray-400">No actions awaiting review.</p>
+          ) : (
+            <div className="space-y-3">
+              {pending.map(action => (
+                <div
+                  key={action.action_id}
+                  className="border border-gray-200 rounded-lg p-4 bg-white hover:border-blue-300 transition-colors"
+                >
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 mb-1 flex-wrap">
+                        <span className="font-mono text-xs text-blue-700 font-semibold">
+                          {action.lot_id_str}
+                        </span>
+                        {actionTypeBadge(action.action_type)}
+                        {priorityBadge(action.priority)}
+                        {statusBadge(action.status)}
+                      </div>
+                      <p className="text-sm text-gray-700 leading-snug">{action.recommendation}</p>
+                      <p className="text-xs text-gray-400 mt-1.5">
+                        Evidence IDs: {action.evidence_ids.join(', ')}
+                      </p>
+                      <p className="text-xs text-gray-300 mt-0.5">
+                        Created: {new Date(action.created_at).toLocaleString()}
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => setReviewTarget(action)}
+                      className="flex-shrink-0 bg-blue-600 text-white text-xs font-medium px-3 py-1.5 rounded hover:bg-blue-700 transition-colors"
+                    >
+                      Review
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </Card>
+
+        {/* Reviewed actions */}
+        <Card title={`Reviewed / Acknowledged (${reviewed.length})`}>
+          {reviewed.length === 0 ? (
+            <p className="text-sm text-gray-400">No completed reviews.</p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="text-left text-xs text-gray-400 border-b">
+                    <th className="pb-2 pr-3">Lot</th>
+                    <th className="pb-2 pr-3">Type</th>
+                    <th className="pb-2 pr-3">Priority</th>
+                    <th className="pb-2 pr-3">Status</th>
+                    <th className="pb-2 pr-3">Reviewer</th>
+                    <th className="pb-2">Notes</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {reviewed.map(action => (
+                    <tr key={action.action_id} className="border-b border-gray-50 hover:bg-gray-50">
+                      <td className="py-1.5 pr-3 font-mono text-xs text-blue-700">{action.lot_id_str}</td>
+                      <td className="py-1.5 pr-3">{actionTypeBadge(action.action_type)}</td>
+                      <td className="py-1.5 pr-3">{priorityBadge(action.priority)}</td>
+                      <td className="py-1.5 pr-3">{statusBadge(action.status)}</td>
+                      <td className="py-1.5 pr-3 text-xs text-gray-600">{action.reviewed_by ?? '—'}</td>
+                      <td className="py-1.5 text-xs text-gray-500 max-w-[200px] truncate">
+                        {action.review_notes ?? '—'}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </Card>
+      </div>
+    </>
   );
 }

@@ -156,3 +156,71 @@ export interface ChamberRecurrenceResponse {
   chambers: ChamberRecurrenceSummary[];
   generated_at: string;
 }
+
+export interface YieldTrendPoint {
+  lot_id_str: string;
+  actual_start_at: string;
+  mean_yield: number;
+  is_excursion: boolean;
+  scenario_hint: string | null;
+}
+
+export interface YieldTrendResponse {
+  points: YieldTrendPoint[];
+  fleet_mean: number;
+  excursion_threshold: number;
+  generated_at: string;
+}
+
+export interface ActionRecommendation {
+  action_id: number | null;
+  lot_id_str: string;
+  recommendation: string;
+  action_type: string;
+  priority: string;
+  evidence_ids: string[];
+  status: string;
+  created_at: string;
+  reviewed_by: string | null;
+  reviewed_at: string | null;
+  review_notes: string | null;
+}
+
+export interface ActionListResponse {
+  actions: ActionRecommendation[];
+  total: number;
+  generated_at: string;
+}
+
+export interface ReviewRequest {
+  action_id: number;
+  decision: 'approved' | 'rejected';
+  reviewer: string;
+  notes?: string;
+}
+
+export interface ReviewResponse {
+  action_id: number;
+  decision: string;
+  reviewer: string;
+  reviewed_at: string;
+  message: string;
+}
+
+export interface EvidenceSummaryItem {
+  evidence_id: string;
+  source_type: string;
+  feature: string;
+  observed_value: number;
+  baseline_value: number;
+  deviation_score: number;
+  direction: string;
+  algorithm_version: string;
+  generated_at: string;
+}
+
+export interface EvidenceResponse {
+  lot_id_str: string;
+  items: EvidenceSummaryItem[];
+  total: number;
+}

@@ -38,56 +38,90 @@ def _query_df(session: Session, sql: str, params: dict[str, Any] | None = None) 
 
 def load_tools(session: Session) -> pd.DataFrame:
     """Return tools table as DataFrame."""
-    return _query_df(session, "SELECT tool_id, name AS tool_name, tool_type, fab_area FROM tools")
+    return _query_df(session, "SELECT id AS tool_id, name AS tool_name, tool_type, fab_area FROM tools")
 
 
 def load_chambers(session: Session) -> pd.DataFrame:
     """Return chambers with tool_name joined (aliased as chamber_name, tool_name)."""
     return _query_df(session, """
-        SELECT c.chamber_id,
+        SELECT c.id          AS chamber_id,
                c.name        AS chamber_name,
                t.name        AS tool_name,
                t.tool_type,
                t.fab_area
         FROM chambers c
-        JOIN tools t ON c.tool_id = t.tool_id
+        JOIN tools t ON c.tool_id = t.id
     """)
 
 
 def load_lots(session: Session) -> pd.DataFrame:
-    """Return lots table."""
+    """
+    Return lots table.
+
+    Column aliases so downstream analytics use stable names:
+      lot_id      → integer primary key (used as FK join key for wafers/yields)
+      lot_id_str  → human-readable business key (e.g. "L0042")
+      queue_time_h → NULL (not stored; pre-run router fills with a default)
+      actual_end_at → NULL (not stored in prototype; router handles gracefully)
+    """
     return _query_df(session, """
-        SELECT lot_id, lot_id_str, product, technology_node, priority,
-               planned_start_at, actual_start_at, queue_time_h,
-               status
+        SELECT id              AS lot_id,
+               lot_id         AS lot_id_str,
+               product,
+               technology_node,
+               priority,
+               status,
+               planned_start_at,
+               actual_start_at,
+               NULL           AS actual_end_at,
+               NULL           AS queue_time_h
         FROM lots
         ORDER BY actual_start_at
     """)
 
 
 def load_wafers(session: Session, lot_id: int | None = None) -> pd.DataFrame:
-    """Return wafers, optionally filtered to a specific lot."""
+    """
+    Return wafers, optionally filtered to a specific lot.
+
+    Column aliases:
+      wafer_id → integer primary key
+      lot_id   → integer FK to lots.id (matches load_lots lot_id)
+    """
     if lot_id is not None:
         return _query_df(session, """
-            SELECT wafer_id, lot_id, slot_number, wafer_status
+            SELECT id       AS wafer_id,
+                   lot_id,
+                   wafer_slot,
+                   die_count_total
             FROM wafers
             WHERE lot_id = :lot_id
         """, {"lot_id": lot_id})
-    return _query_df(session, "SELECT wafer_id, lot_id, slot_number, wafer_status FROM wafers")
+    return _query_df(session, """
+        SELECT id       AS wafer_id,
+               lot_id,
+               wafer_slot,
+               die_count_total
+        FROM wafers
+    """)
 
 
 def load_runs(session: Session, lot_id: int | None = None) -> pd.DataFrame:
-    """Return runs with chamber and recipe info, optionally filtered by lot."""
+    """Return runs, optionally filtered by lot (via wafer FK)."""
     if lot_id is not None:
         return _query_df(session, """
-            SELECT r.run_id, r.wafer_id, r.chamber_id, r.recipe_id,
-                   r.start_time, r.end_time
+            SELECT r.id         AS run_id,
+                   r.wafer_id,
+                   r.chamber_id,
+                   r.recipe_id,
+                   r.start_time,
+                   r.end_time
             FROM runs r
-            JOIN wafers w ON r.wafer_id = w.wafer_id
+            JOIN wafers w ON r.wafer_id = w.id
             WHERE w.lot_id = :lot_id
         """, {"lot_id": lot_id})
     return _query_df(session, """
-        SELECT run_id, wafer_id, chamber_id, recipe_id, start_time, end_time
+        SELECT id AS run_id, wafer_id, chamber_id, recipe_id, start_time, end_time
         FROM runs
     """)
 
@@ -115,14 +149,14 @@ def load_metrology(session: Session, lot_id: int | None = None) -> pd.DataFrame:
     """Return metrology rows."""
     if lot_id is not None:
         return _query_df(session, """
-            SELECT m.metro_id, m.wafer_id, m.metric_name, m.value, m.unit,
+            SELECT m.id AS metro_id, m.wafer_id, m.metric_name, m.value, m.unit,
                    m.measured_at, m.site_x, m.site_y
             FROM metrology m
-            JOIN wafers w ON m.wafer_id = w.wafer_id
+            JOIN wafers w ON m.wafer_id = w.id
             WHERE w.lot_id = :lot_id
         """, {"lot_id": lot_id})
     return _query_df(session, """
-        SELECT metro_id, wafer_id, metric_name, value, unit, measured_at, site_x, site_y
+        SELECT id AS metro_id, wafer_id, metric_name, value, unit, measured_at, site_x, site_y
         FROM metrology
     """)
 
@@ -132,12 +166,12 @@ def load_defects(session: Session, wafer_ids: list[int] | None = None) -> pd.Dat
     if wafer_ids:
         placeholders = ", ".join(str(i) for i in wafer_ids)
         return _query_df(session, f"""
-            SELECT defect_id, wafer_id, x_coord, y_coord, defect_class, inspected_at
+            SELECT id AS defect_id, wafer_id, x_coord, y_coord, defect_class, inspected_at
             FROM defects
             WHERE wafer_id IN ({placeholders})
         """)
     return _query_df(session, """
-        SELECT defect_id, wafer_id, x_coord, y_coord, defect_class, inspected_at
+        SELECT id AS defect_id, wafer_id, x_coord, y_coord, defect_class, inspected_at
         FROM defects
     """)
 
@@ -149,14 +183,14 @@ def load_maintenance_events(
     """Return maintenance events, optionally filtered to a chamber."""
     if chamber_id is not None:
         return _query_df(session, """
-            SELECT maint_id, chamber_id, event_type, performed_at,
+            SELECT id AS maint_id, chamber_id, event_type, performed_at,
                    performed_by, description
             FROM maintenance_events
             WHERE chamber_id = :chamber_id
             ORDER BY performed_at
         """, {"chamber_id": chamber_id})
     return _query_df(session, """
-        SELECT maint_id, chamber_id, event_type, performed_at,
+        SELECT id AS maint_id, chamber_id, event_type, performed_at,
                performed_by, description
         FROM maintenance_events
         ORDER BY performed_at
@@ -164,17 +198,34 @@ def load_maintenance_events(
 
 
 def load_yield_results(session: Session, lot_id: int | None = None) -> pd.DataFrame:
-    """Return yield_results, optionally filtered by lot."""
+    """
+    Return yield_results joined to wafers so lot_id is available.
+
+    lot_id here is the integer FK matching load_lots()/load_wafers() lot_id.
+    """
     if lot_id is not None:
         return _query_df(session, """
-            SELECT yr.yield_id, yr.wafer_id, yr.lot_id, yr.die_yield,
-                   yr.bin1_count, yr.bin_fail_count, yr.tested_at
+            SELECT yr.id       AS yield_id,
+                   yr.wafer_id,
+                   w.lot_id,
+                   yr.die_yield,
+                   yr.bin1_count,
+                   yr.bin_fail_count,
+                   yr.tested_at
             FROM yield_results yr
-            WHERE yr.lot_id = :lot_id
+            JOIN wafers w ON yr.wafer_id = w.id
+            WHERE w.lot_id = :lot_id
         """, {"lot_id": lot_id})
     return _query_df(session, """
-        SELECT yield_id, wafer_id, lot_id, die_yield, bin1_count, bin_fail_count, tested_at
-        FROM yield_results
+        SELECT yr.id       AS yield_id,
+               yr.wafer_id,
+               w.lot_id,
+               yr.die_yield,
+               yr.bin1_count,
+               yr.bin_fail_count,
+               yr.tested_at
+        FROM yield_results yr
+        JOIN wafers w ON yr.wafer_id = w.id
     """)
 
 
@@ -185,23 +236,21 @@ def load_pre_run_features(session: Session) -> pd.DataFrame:
     Uses ONLY columns that are available before a lot starts.
     See PRE_RUN_FEATURE_WHITELIST in scenarios.py for the authoritative list.
 
-    Note: This query pre-computes derived features (chamber_yield_30d,
-    days_since_last_pm, chamber_ooc_rate_30d) from historical data using
-    window functions / correlated sub-selects.  For the prototype these are
-    approximated by joining pre-computed columns stored in the lots table
-    (feature columns written by seed_db.py).
+    Derived features (chamber_yield_30d, days_since_last_pm, chamber_ooc_rate_30d)
+    are approximated with defaults in the pre_run router — they are not stored
+    as columns in the prototype DB.
     """
     return _query_df(session, """
         SELECT
-            l.lot_id,
-            l.lot_id_str,
-            l.priority         AS lot_priority,
-            l.product          AS product_encoded,
-            l.technology_node  AS technology_node_encoded,
+            l.id               AS lot_id,
+            l.lot_id           AS lot_id_str,
+            l.priority,
+            l.product,
+            l.technology_node,
             l.planned_start_at,
             l.actual_start_at,
-            l.actual_end_at,
-            l.queue_time_h     AS queue_time_planned_h
+            NULL               AS actual_end_at,
+            NULL               AS queue_time_h
         FROM lots l
         ORDER BY l.actual_start_at
     """)

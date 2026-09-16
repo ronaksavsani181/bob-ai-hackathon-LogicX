@@ -54,7 +54,8 @@ def _build_feature_df(lots_df: pd.DataFrame) -> pd.DataFrame:
     df["chamber_yield_30d"]    = 0.94
     df["days_since_last_pm"]   = 30.0
     df["chamber_ooc_rate_30d"] = 0.02
-    df["queue_time_planned_h"] = df["queue_time_h"].fillna(24.0)
+    # queue_time_h is NULL in DB prototype — default to 24 h
+    df["queue_time_planned_h"] = pd.to_numeric(df.get("queue_time_h", 24.0), errors="coerce").fillna(24.0)
     # Enforce audit before returning
     audit_for_leakage(df, raise_on_forbidden=True)
     return df

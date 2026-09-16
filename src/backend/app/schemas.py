@@ -244,3 +244,31 @@ class ChamberRecurrenceSummary(BaseModel):
 class ChamberRecurrenceResponse(BaseModel):
     chambers: list[ChamberRecurrenceSummary]
     generated_at: datetime
+
+
+# ---------------------------------------------------------------------------
+# Yield trend (monitor screen chart)
+# ---------------------------------------------------------------------------
+
+class YieldTrendPoint(BaseModel):
+    lot_id_str: str
+    actual_start_at: datetime
+    mean_yield: float
+    is_excursion: bool
+    scenario_hint: str | None = None   # broad label for demo colouring — never used in analytics
+
+class YieldTrendResponse(BaseModel):
+    points: list[YieldTrendPoint]
+    fleet_mean: float
+    excursion_threshold: float
+    generated_at: datetime
+
+
+# ---------------------------------------------------------------------------
+# Actions list (for GET /api/actions)
+# ---------------------------------------------------------------------------
+
+class ActionListResponse(BaseModel):
+    actions: list[ActionRecommendationSchema]
+    total: int
+    generated_at: datetime

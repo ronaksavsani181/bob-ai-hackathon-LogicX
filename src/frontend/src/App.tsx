@@ -9,8 +9,8 @@
 import React, { useState, Suspense } from 'react';
 import { Spinner } from './components/Shared';
 
-const MonitorScreen     = React.lazy(() => import('./screens/MonitorScreen'));
-const InvestigateScreen = React.lazy(() => import('./screens/InvestigateScreen'));
+const MonitorScreen     = React.lazy(() => import('./pages/Monitor'));
+const InvestigateScreen = React.lazy(() => import('./pages/Investigate'));
 const WaferPatternScreen= React.lazy(() => import('./screens/WaferPatternScreen'));
 const PreRunScreen      = React.lazy(() => import('./screens/PreRunScreen'));
 const EvidenceScreen    = React.lazy(() => import('./screens/EvidenceScreen'));

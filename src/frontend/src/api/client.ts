@@ -25,6 +25,11 @@ import type {
   PreRunRiskListResponse,
   PreRunRiskSummary,
   ChamberRecurrenceResponse,
+  YieldTrendResponse,
+  ActionListResponse,
+  ReviewRequest,
+  ReviewResponse,
+  EvidenceResponse,
   HealthResponse,
 } from '../types/api';
 
@@ -49,7 +54,24 @@ export const api = {
     apiFetch<WaferPatternResponse>(`/api/lots/${lotIdStr}/patterns?sample_wafers=${sampleWafers}`),
   lotRootCause: (lotIdStr: string) => apiFetch<RootCauseResponse>(`/api/lots/${lotIdStr}/root-cause`),
 
+  // Monitor extras
+  yieldTrend: (lastN = 150) => apiFetch<YieldTrendResponse>(`/api/monitor/yield-trend?last_n=${lastN}`),
+
   // Pre-run risk
   preRunRisk: (topN = 50) => apiFetch<PreRunRiskListResponse>(`/api/pre-run/risk?top_n=${topN}`),
   preRunRiskSingle: (lotIdStr: string) => apiFetch<PreRunRiskSummary>(`/api/pre-run/risk/${lotIdStr}`),
+
+  // Evidence
+  lotEvidence: (lotIdStr: string) => apiFetch<EvidenceResponse>(`/api/lots/${lotIdStr}/evidence`),
+
+  // Actions
+  listActions: (status?: string) => {
+    const qs = status ? `?status=${status}` : '';
+    return apiFetch<ActionListResponse>(`/api/actions${qs}`);
+  },
+  submitReview: (body: ReviewRequest) =>
+    apiFetch<ReviewResponse>('/api/actions/review', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
 };
