@@ -13,7 +13,7 @@ vi.stubGlobal('fetch', mockFetch);
 
 // Re-import after stubbing (vite/vitest resolves ESM statically so we use
 // a dynamic import inside each test where needed)
-const BASE = 'http://localhost:8000';
+const BASE = '';
 
 function mockOk(body: unknown): Response {
   return {

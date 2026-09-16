@@ -29,7 +29,19 @@ def _query_df(session: Session, sql: str, params: dict[str, Any] | None = None) 
     result = session.execute(text(sql), params or {})
     rows = result.fetchall()
     columns = list(result.keys())
-    return pd.DataFrame(rows, columns=columns)
+    df = pd.DataFrame(rows, columns=columns)
+    # SQLite stores datetimes as strings — coerce columns with datetime-like
+    # names so downstream pandas comparisons work correctly.
+    datetime_suffixes = ("_at", "_time", "_date", "_timestamp")
+    for col in df.columns:
+        col_lower = col.lower()
+        is_datetime_column = (
+            col_lower.endswith(datetime_suffixes)
+            or col_lower in {"date", "timestamp"}
+        )
+        if is_datetime_column and df[col].notna().any():
+            df[col] = pd.to_datetime(df[col], errors="coerce", utc=True)
+    return df
 
 
 # ---------------------------------------------------------------------------
@@ -135,12 +147,12 @@ def load_process_parameters(
         # SQLAlchemy text() cannot accept a list directly — use IN with bind params
         placeholders = ", ".join(str(i) for i in run_ids)
         return _query_df(session, f"""
-            SELECT pp_id, run_id, param_name, value, unit, nominal, lsl, usl
+            SELECT id AS pp_id, run_id, param_name, value, unit, nominal, lsl, usl
             FROM process_parameters
             WHERE run_id IN ({placeholders})
         """)
     return _query_df(session, """
-        SELECT pp_id, run_id, param_name, value, unit, nominal, lsl, usl
+        SELECT id AS pp_id, run_id, param_name, value, unit, nominal, lsl, usl
         FROM process_parameters
     """)
 
@@ -198,16 +210,11 @@ def load_maintenance_events(
 
 
 def load_yield_results(session: Session, lot_id: int | None = None) -> pd.DataFrame:
-    """
-    Return yield_results joined to wafers so lot_id is available.
-
-    lot_id here is the integer FK matching load_lots()/load_wafers() lot_id.
-    """
+    """Return yield_results."""
     if lot_id is not None:
         return _query_df(session, """
             SELECT yr.id       AS yield_id,
                    yr.wafer_id,
-                   w.lot_id,
                    yr.die_yield,
                    yr.bin1_count,
                    yr.bin_fail_count,
@@ -217,15 +224,13 @@ def load_yield_results(session: Session, lot_id: int | None = None) -> pd.DataFr
             WHERE w.lot_id = :lot_id
         """, {"lot_id": lot_id})
     return _query_df(session, """
-        SELECT yr.id       AS yield_id,
-               yr.wafer_id,
-               w.lot_id,
-               yr.die_yield,
-               yr.bin1_count,
-               yr.bin_fail_count,
-               yr.tested_at
-        FROM yield_results yr
-        JOIN wafers w ON yr.wafer_id = w.id
+        SELECT id       AS yield_id,
+               wafer_id,
+               die_yield,
+               bin1_count,
+               bin_fail_count,
+               tested_at
+        FROM yield_results
     """)
 
 

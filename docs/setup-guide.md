@@ -44,22 +44,28 @@ cd src/backend
 python -m venv .venv
 source .venv/bin/activate   # Windows: .venv\Scripts\activate
 
-# Install dependencies
+# Install dependencies (skip psycopg2 if no PostgreSQL installed)
 pip install -e ".[dev]"
 
-# Set environment variables
-export DATABASE_URL="postgresql+psycopg2://logicx:logicx@localhost:5432/wafer_yield"
+# Set environment variables for SQLite (no PostgreSQL required)
+# Linux/macOS:
+export DATABASE_URL="sqlite:///./wafer_yield.db"
 export SEED=42
 
-# Run Alembic migrations
-alembic upgrade head
+# Windows PowerShell:
+# $env:DATABASE_URL = "sqlite:///./wafer_yield.db"
+# $env:SEED = "42"
 
-# Seed the database
+# Seed the database (creates tables + inserts synthetic data)
 python data/seed_db.py
 
 # Start the backend
 uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
+
+> **Note**: For local development SQLite works out of the box.
+> For production or Docker Compose, PostgreSQL is used automatically.
+
 
 ### Frontend
 
@@ -89,7 +95,7 @@ python -m pytest tests/ -v
 
 Tests use SQLite in-memory; no PostgreSQL connection required.
 
-Expected: **100 tests pass** in ~4 minutes.
+Expected: **102 tests pass** in ~4 minutes.
 
 ### Frontend TypeScript check
 
@@ -106,9 +112,9 @@ Expected: no errors.
 
 | Variable | Default | Description |
 |---|---|---|
-| `DATABASE_URL` | `sqlite:///./test.db` | SQLAlchemy DB URL |
+| `DATABASE_URL` | `sqlite:///wafer_yield.db` | SQLAlchemy DB URL |
 | `SEED` | `42` | Deterministic data generation seed |
-| `VITE_API_URL` | `http://localhost:8000` | Backend URL for the React app |
+| `VITE_API_URL` | same-origin `/api` | Optional backend URL override for the React app |
 
 ---
 

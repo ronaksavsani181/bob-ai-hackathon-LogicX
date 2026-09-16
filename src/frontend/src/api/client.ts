@@ -1,7 +1,9 @@
 // src/api/client.ts — Typed API client for the FastAPI backend
 
 // Vite injects import.meta.env at build time (declared in vite/client types)
-const BASE_URL: string = import.meta.env.VITE_API_URL ?? 'http://localhost:8000';
+// Use the current origin by default so both Vite's development proxy and the
+// production nginx API proxy route requests to the backend correctly.
+const BASE_URL: string = import.meta.env.VITE_API_URL ?? '';
 
 async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
   const url = `${BASE_URL}${path}`;

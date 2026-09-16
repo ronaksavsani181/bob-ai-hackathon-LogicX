@@ -35,10 +35,15 @@ def get_engine() -> "Engine":
     global _engine
     if _engine is None:
         from app.config import settings
+        url = settings.database_url
+        connect_args: dict = {}
+        if url.startswith("sqlite"):
+            connect_args["check_same_thread"] = False
         _engine = create_engine(
-            settings.database_url,
+            url,
             pool_pre_ping=True,
             echo=settings.environment == "test",
+            connect_args=connect_args,
         )
     return _engine
 

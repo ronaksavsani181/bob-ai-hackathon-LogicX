@@ -28,7 +28,18 @@ ibm_products_used:
   - "IBM Bob (SDLC agent — plan-driven development)"
 
 members:
-  - FILL_BEFORE_SUBMIT   # Add team member names/IDs
+  - name: "Ronak Savsani"
+    student_id: "26MSIT138"
+    role: "Team Leader"
+  - name: "Fenil Bhingradiya"
+    student_id: "26MSIT009"
+    role: "Team Member"
+  - name: "Alpesh Dharejiya"
+    student_id: "26MSIT020"
+    role: "Team Member"
+  - name: "Mohit Dhandhukiya"
+    student_id: "26MSIT019"
+    role: "Team Member"
 
 quickstart: |
   git clone <https://github.com/ronaksavsani181/bob-ai-hackathon-LogicX>

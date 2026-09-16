@@ -1,0 +1,135 @@
+name: Validate Submission
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  validate-submission:
+    name: Validate submission.yaml
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Validate submission.yaml exists
+        run: |
+          if [ ! -f submission.yaml ]; then
+            echo "❌ submission.yaml not found"
+            exit 1
+          fi
+          echo "✅ submission.yaml exists"
+
+      - name: Validate required fields
+        run: |
+          echo "Checking required fields in submission.yaml..."
+          for field in team_name challenge_id project_name repository_url; do
+            if ! grep -q "^${field}:" submission.yaml; then
+              echo "❌ Missing required field: ${field}"
+              exit 1
+            fi
+          done
+          echo "✅ All required fields present"
+
+      - name: Check for FILL_BEFORE_SUBMIT placeholders
+        run: |
+          if grep -q "FILL_BEFORE_SUBMIT" submission.yaml; then
+            echo "❌ submission.yaml still contains FILL_BEFORE_SUBMIT placeholders"
+            exit 1
+          fi
+          echo "✅ No FILL_BEFORE_SUBMIT placeholders found"
+
+  validate-structure:
+    name: Validate repository structure
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Verify required files and directories
+        run: |
+          echo "Checking required files..."
+          REQUIRED_FILES=(
+            "README.md"
+            "submission.yaml"
+            "docker-compose.yml"
+            "src/backend/pyproject.toml"
+            "src/backend/app/main.py"
+            "src/frontend/package.json"
+            "src/frontend/vite.config.ts"
+            "docs/setup-guide.md"
+            "docs/architecture.md"
+          )
+          ALL_PASS=true
+          for f in "${REQUIRED_FILES[@]}"; do
+            if [ -f "$f" ]; then
+              echo "  ✅ $f"
+            else
+              echo "  ❌ $f missing"
+              ALL_PASS=false
+            fi
+          done
+          if [ "$ALL_PASS" = false ]; then
+            exit 1
+          fi
+          echo "✅ All required files present"
+
+  backend-tests:
+    name: Backend tests (pytest)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: src/backend
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install -e ".[dev]"
+
+      - name: Run tests
+        env:
+          DATABASE_URL: "sqlite:///./test.db"
+          ENVIRONMENT: test
+          SEED: "42"
+        run: python -m pytest tests/ -v --tb=short
+
+  frontend-lint:
+    name: Frontend TypeScript check
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: src/frontend
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: src/frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: TypeScript check
+        run: node node_modules/typescript/bin/tsc --noEmit
+
+  docker-build:
+    name: Docker Compose build check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Build all services
+        run: docker compose build

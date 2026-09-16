@@ -9,7 +9,7 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
     # Database
-    database_url: str = "postgresql+psycopg2://logicx:logicx@db:5432/wafer_yield"
+    database_url: str = "sqlite:///wafer_yield.db"
 
     # Application
     environment: str = "production"  # production | test
