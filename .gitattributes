@@ -1,0 +1,3 @@
+# Keep POSIX entrypoints runnable when the repository is cloned on Windows and
+# bind-mounted into Linux Docker containers.
+*.sh text eol=lf

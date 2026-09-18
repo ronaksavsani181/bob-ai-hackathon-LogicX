@@ -5,6 +5,9 @@ import react from '@vitejs/plugin-react'
 export default defineConfig({
   plugins: [react()],
   server: {
+    // Bind to IPv4 explicitly so the documented http://127.0.0.1:5173 URL
+    // works consistently on Windows machines where localhost resolves to ::1.
+    host: '127.0.0.1',
     port: 5173,
     proxy: {
       '/api': {

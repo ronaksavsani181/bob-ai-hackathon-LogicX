@@ -15,6 +15,7 @@ from datetime import datetime, timezone
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.config import settings
 from app.routers import lots, monitor, pre_run, actions
 from app.schemas import HealthResponse
 
@@ -35,7 +36,7 @@ app = FastAPI(
 # ---------------------------------------------------------------------------
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Allow all origins during development
+    allow_origins=settings.cors_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -55,6 +56,10 @@ app.include_router(actions.router)
 # ---------------------------------------------------------------------------
 @app.get("/api/health", response_model=HealthResponse, tags=["health"])
 def health() -> HealthResponse:
+    """Return the API readiness response.
+
+    @returns: Current service status, version, and UTC response timestamp.
+    """
     return HealthResponse(
         status="ok",
         version="0.1.0",

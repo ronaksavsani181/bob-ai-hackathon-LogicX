@@ -26,7 +26,7 @@ services:
       dockerfile: Dockerfile
     restart: unless-stopped
     environment:
-      DATABASE_URL: postgresql+psycopg2://logicx:logicx@db:5432/wafer_yield
+      DATABASE_URL: postgresql+psycopg://logicx:logicx@db:5432/wafer_yield
       ENVIRONMENT: production
       SEED: "42"
     ports:
@@ -56,7 +56,7 @@ services:
       context: src/backend
       dockerfile: Dockerfile
     environment:
-      DATABASE_URL: "sqlite+aiosqlite:///:memory:"
+      DATABASE_URL: "sqlite:///:memory:"
       ENVIRONMENT: test
       SEED: "42"
     volumes:

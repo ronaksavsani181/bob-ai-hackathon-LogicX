@@ -1,6 +1,6 @@
 """
 Database engine and session factory.
-Uses SQLAlchemy 2.x synchronous engine (psycopg2 in production, aiosqlite/SQLite in tests).
+Uses SQLAlchemy 2.x synchronous engine (psycopg in PostgreSQL deployments and SQLite locally).
 
 The engine is created lazily on first use so that the DATABASE_URL environment
 variable can be overridden in tests before the engine is constructed.

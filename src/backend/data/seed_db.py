@@ -333,8 +333,8 @@ def seed(batch_size: int = 500) -> None:
             log.info("Database already contains data — skipping seed (idempotent).")
             return
 
-        log.info("Generating synthetic dataset (seed=42)…")
-        ds = generate_all(seed=42)
+        log.info("Generating synthetic dataset (seed=%s)…", settings.seed)
+        ds = generate_all(seed=settings.seed)
 
         log.info(f"  tools:       {len(ds.tools)}")
         log.info(f"  chambers:    {len(ds.chambers)}")

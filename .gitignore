@@ -88,6 +88,9 @@ htmlcov/
 .coverage
 
 # Misc
+*.db
+*.db-shm
+*.db-wal
 *.log
 *.tmp
 *.bak
