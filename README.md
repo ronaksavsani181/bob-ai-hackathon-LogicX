@@ -153,6 +153,21 @@ For granular details on the architectural mechanisms powering this submission, r
 *   **[Pre-Run Data Leakage Prevention](docs/pre-run-risk.md)** — Exact configuration of feature whitelisting models protecting pre-run risk scoring.
 *   **[Relational Database Schema](docs/data-model.md)** — Visual overview of the 17 entity relationships mapping our system layout.
 
+## 🚀 ChatGPT Project Resource
+
+This repository is powered by custom logic and insights developed within a dedicated AI environment. You can access the full background context, development history, and configuration details directly via the link below:
+
+* **[View the Complete ChatGPT Project Workspace](https://chatgpt.com/share/6aae5057-4178-83ee-9c31-8d5c7d97f6e9)**
+
+* (https://chatgpt.com/share/6aae5057-4178-83ee-9c31-8d5c7d97f6e9)
+
+### 📖 How to Use This Shared Link
+
+1. **Click the Link:** Open the [ChatGPT Complete Project Link](https://chatgpt.com/share/6aae5057-4178-83ee-9c31-8d5c7d97f6e9 "ChatGPT Project Workspace") to review the full generation history and engineering prompts.
+2. **Continue the Conversation:** Click **"Continue this chat"** or **"Use this GPT"** on the landing page to load the baseline logic into your own account.
+3. **Review Sources:** Examine the reference code snippets, system rules, and markdown structures parsed throughout the development lifecycle.
+
+
 ---
 
 ## 🛑 Data Disclaimer
