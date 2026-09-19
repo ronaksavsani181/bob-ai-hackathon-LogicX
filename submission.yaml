@@ -7,7 +7,7 @@
 team_name: LogicX
 challenge_id: S1
 project_name: "Wafer Yield Root Cause & Defect Pattern Analyser"
-project_description: >
+project_description: 
   A semiconductor manufacturing analytics control-tower prototype that ingests
   wafer lot data and defect reports to identify yield/defect patterns, rank
   evidence-supported root-cause candidates, recommend corrective actions, and
@@ -41,7 +41,7 @@ members:
     student_id: "26MSIT019"
     role: "Team Member"
 
-quickstart: |
+quickstart: 
   git clone <https://github.com/ronaksavsani181/bob-ai-hackathon-LogicX>
   cd <repo>
   docker compose up --build
